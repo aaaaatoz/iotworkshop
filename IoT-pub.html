@@ -39,7 +39,9 @@
 	function showMessage(topic, payload) {
 		var msgTab = document.getElementById('message');
 		doorStatus = JSON.parse(payload).message == "0" ? "Closed" : "Open";
+		color = JSON.parse(payload).message == "0" ? "green" : "red";
 		document.getElementById('message').innerHTML = "Door status: " + doorStatus;
+		document.getElementById('message').style.backgroundColor = color;
 	}
 
 	//Need bundle.js to work
@@ -47,11 +49,11 @@
 	            var clientID = 'webapp:' + new Date().getTime(); //needs to be unique
 	            device = AwsIot.device({
 	                clientId: clientID,
-	                host: '******-ats.iot.us-east-1.amazonaws.com', //can be queried using 'aws iot describe-endpoint'
+	                host: '****-ats.iot.us-east-1.amazonaws.com', //can be queried using 'aws iot describe-endpoint'
 	                protocol: 'wss',
 									// hardcode accesskey/secret - never do it in your account.
-	                accessKeyId: '*******',
-	                secretKey: '*******',
+	                accessKeyId: '****',
+	                secretKey: '****',
 	            });
 	            device.on('connect', function () {
 	                console.log("connected");
