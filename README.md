@@ -1,4 +1,4 @@
-# step 0: **preparation**
+# step 0: preparation
 set up the cloudformation(Preparation.yaml) stack in the us-east-1(or any region with IoT and Cloud9, should be fine although I haven't done the fully testing)
 
 - CFN will take about 40 mins to build it(the majority of time is to build a cloudfront distruction so that your s3 isn’t public facing)
@@ -8,7 +8,7 @@ set up the cloudformation(Preparation.yaml) stack in the us-east-1(or any region
 
 
 
-# step 1: **basic pub and sub**
+# step 1: basic pub and sub
 ~~~~
 In this step we will create a device client to publish a status message to a topic then use a web UI to receive this status message
 ~~~~
@@ -37,23 +37,24 @@ In this step we will create a device client to publish a status message to a top
   from IoT console - eg a2a4ziueyywvoe-ats.iot.us-east-1.amazonaws.com or
   #aws iot describe-endpoint --endpoint-type iot:Data-ats --region us-east-1 > iot-endpoint.txt
   ~~~~
-## prepare the **authorization**
+## prepare the authorization
+  - attach the full IoT policy(IoTWorkshop-FullPolicy-Delete) to the certificate
   ~~~~
-  attach the full IoT policy(IoTWorkshop-FullPolicy-Delete) to the certificate
   go to "aws iot console" and in secure -> certificate
   (https://console.aws.amazon.com/iot/home?region=us-east-1#/certificatehub),
   locate and locate your certificate
   click the certificate then actions -> attach the IoTWorkshop-FullPolicy-Delete
-  ~~~~
 - attendees need to understand the authentication and authorization
   ~~~~
   testing:
+  ~~~~
   authentication:
   openssl s_client -connect a2a4ziueyywvoe-ats.iot.us-east-1.amazonaws.com:8443 -CAfile rootca.pem -cert cert.pem -key key.pem -v
 
-  in the console - https://console.aws.amazon.com/iot/home?region=us-east-1#/test
-  subscribe to "my/topic" in the console to see if you can find the message
 
+  authorization
+  in the console - https://console.aws.amazon.com/iot/home?region=us-east-1#/test
+  subscribe to "my/topic" in the console.
   curl --tlsv1.2 --cacert rootca.pem --cert cert.pem --key key.pem -X POST -d "{ \"message\": \"Hello, world\" }" "https://a2a4ziueyywvoe-ats.iot.us-east-1.amazonaws.com:8443/topics/my/topic"
   ~~~~
 
@@ -122,21 +123,19 @@ In this step we will create a iot-job agent to kill the iot-main.py, replace the
 - prepare the job artifacts:
   ~~~~
   aws s3 cp ./iotworkshop/iot-dummy.py s3://[yourbucket]
+  ~~~~
   change the [cloudfront] to your cloudfront in your ./iotworkshop/iot-dummy.json file
-  ~~~~
-- check if the iot-main.py file is updated
-  ~~~~
-  https://[cloudfront].cloudfront.net/iot-dummy.py
-  ~~~~
 - start the ./iot-job.py
 - create a job:
   ~~~~
   aws iot create-job     --job-id $(uuidgen)     --targets "arn:aws:iot:us-east-1:[youraccountid]:thing/Door" --document file://iotworkshop/iot-dummy.json
   ~~~~
+- check if the iot-main.py file is updated
 
-# step 3 **iot shadow - reported**
+# step 3 iot shadow - reported
   ~~~~
   cd iotworkshop
+  git stash
   git checkout step3
   cd ..
   ~~~~
@@ -150,22 +149,27 @@ In this step we will create a iot-job agent to kill the iot-main.py, replace the
   ~~~~
   aws iot create-job  --job-id $(uuidgen)     --targets "arn:aws:iot:us-east-1:620428855768:thing/Door" --document file://iotworkshop/iot-shadow.json
   ~~~~
+
 ## update the ./iotworkshop/iot-shadow.html in [replaceme] field, the value is in output of cloudformation
+
  1. ClientId:
  2. AppWebDomain:
  3. RedirectUriSignIn and RedirectUriSignOut
  4. UserPoolId:
  5. IdentityPoolId:
  6. spend some time to understand the code.
+
 - copy the js, css and html file to the s3
-  ~~~~
+
+~~~~
 $ aws s3 cp ./iotworkshop/amazon-cognito-auth.min.js  s3://[yourbucket]
-$ aws s3 cp ./iotworkshop/bundle.js  s3://[yourbucket]                                    
+$ aws s3 cp ./iotworkshop/bundle.js  s3://[yourbucket]
 $ aws s3 cp ./iotworkshop/styleSheetStart.css s3://[yourbucket]
 $ aws s3 cp ./iotworkshop/iot-shadow.html s3://[yourbucket]
-  ~~~~
+~~~~
+
 ## test:
- use chrome to open the   https://[cloudfront].cloudfront.net/iot-shadow.html
+use chrome to open the   https://[cloudfront].cloudfront.net/iot-shadow.html
 
 # step 4 **iot shadow - desired**
 ## set up the lambda code
@@ -177,8 +181,9 @@ cd ..
 ~~~~
 - update the lambda - IoTWorkshopSetStatus
 - update the iot-control.html with the correct API GW endpoint (the endpoint is in CloudFormation output)
-open the iot-control.html in the local laptop and change the door status - check the REST APIs/Lambda invocation
-understand how it works.
+- open the iot-control.html in the local laptop and change the door status - check the REST APIs/Lambda invocation
+- understand how it works.
+
 ## update the iot-main.py to receive the shadow delta
 - update the iot-main function by iot-job agent
 ~~~~
