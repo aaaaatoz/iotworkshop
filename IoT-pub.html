@@ -1,0 +1,68 @@
+<!--
+ Amazon Cognito Auth SDK for JavaScript
+ Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+ Licensed under the Apache License, Version 2.0 (the "License").
+ You may not use this file except in compliance with the License.
+ A copy of the License is located at
+
+         http://aws.amazon.com/apache2.0/
+
+ or in the "license" file accompanying this file.
+ This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES
+ OR CONDITIONS OF ANY KIND, either express or implied. See the
+ License for the specific language governing permissions
+ and limitations under the License.
+-->
+
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+	<title>Cognito Auth JS SDK Sample</title>
+	<meta charset="UTF-8">
+	<link rel="stylesheet" href="./styleSheetStart.css">
+  <script src="./bundle.js"/></script>
+	<script type="text/javascript"></script>
+</head>
+
+<body  onload="onLoad()">
+	<div id="message">
+		<pre id="message"> Door Status: Unknown </pre>
+	</div>
+	<script>
+	// Operations when the web page is loaded.
+	function onLoad() {
+		connect();
+	}
+
+  // Operations when showing message.
+	function showMessage(topic, payload) {
+		var msgTab = document.getElementById('message');
+		doorStatus = JSON.parse(payload).message == "0" ? "Closed" : "Open";
+		document.getElementById('message').innerHTML = "Door status: " + doorStatus;
+	}
+
+	//Need bundle.js to work
+	function connect() {
+	            var clientID = 'webapp:' + new Date().getTime(); //needs to be unique
+	            device = AwsIot.device({
+	                clientId: clientID,
+	                host: '******-ats.iot.us-east-1.amazonaws.com', //can be queried using 'aws iot describe-endpoint'
+	                protocol: 'wss',
+									// hardcode accesskey/secret - never do it in your account.
+	                accessKeyId: '*******',
+	                secretKey: '*******',
+	            });
+	            device.on('connect', function () {
+	                console.log("connected");
+									device.subscribe('/status/whatever');
+	            });
+
+							device.on('message', function(topic, payload) {
+								showMessage(topic, payload);
+					    	console.log('message', topic, payload.toString());
+					  	});
+	       }
+	</script>
+</body>
+</html>
