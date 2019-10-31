@@ -1,0 +1,252 @@
+<!--
+ Amazon Cognito Auth SDK for JavaScript
+ Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+
+ Licensed under the Apache License, Version 2.0 (the "License").
+ You may not use this file except in compliance with the License.
+ A copy of the License is located at
+
+         http://aws.amazon.com/apache2.0/
+
+ or in the "license" file accompanying this file.
+ This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES
+ OR CONDITIONS OF ANY KIND, either express or implied. See the
+ License for the specific language governing permissions
+ and limitations under the License.
+-->
+
+<!DOCTYPE html>
+<html lang="en-US">
+<head>
+	<title>Cognito Auth JS SDK Sample</title>
+	<meta charset="UTF-8">
+	<link rel="stylesheet" href="./styleSheetStart.css">
+	<script src="./amazon-cognito-auth.min.js"></script>
+	<script src="https://sdk.amazonaws.com/js/aws-sdk-2.556.0.min.js"/></script>
+  <script src="./bundle.js"/></script>
+	<script type="text/javascript"></script>
+	<!-- To enable the advanced security feature -->
+	<!-- <script src="https://amazon-cognito-assets.<region>.amazoncognito.com/amazon-cognito-advanced-security-data.min.js"></script> -->
+	<!-- E.g. -->
+	<!-- <script src="https://amazon-cognito-assets.us-east-1.amazoncognito.com/amazon-cognito-advanced-security-data.min.js"></script> -->
+</head>
+
+<body  onload="onLoad()">
+	<div>
+		<h1>
+			Web UI to show the Door Shadow
+		</h1>
+	</div>
+  <div><br></div>
+  <div>
+      <p id="statusNotAuth" title="Status">
+          Sign-In to Continue
+      </p>
+      <p id="statusAuth" title="Status">
+          You have Signed-In
+      </p>
+  </div>
+
+	<div class="tabsWell">
+		<div id="startButtons">
+			<div class="button">
+				<a class="nav-tabs" id="signInButton" href="javascript:void(0)" title="Sign in">Sign In</a>
+			</div>
+		</div>
+		<div class="tab-content">
+			<div class="tab-pane" id="userdetails">
+				<p class="text-icon" title="Minimize" id="tabIcon" onclick="toggleTab('usertab');">_</p>
+				<br>
+				<h2 id="ThingShadow">Door Shadow Status</h2>
+				<div class="user-form" id="message">
+					<pre id="reportedStatus"> ... </pre>
+					<pre id="desiredStatus"> ... </pre>
+				</div>
+			</div>
+		</div>
+	</div>
+	<script>
+
+	var shadowsRegistered = false;
+
+	// Operations when the web page is loaded.
+	function onLoad() {
+		var i, items, tabs;
+		items = document.getElementsByClassName("tab-pane");
+		for (i = 0; i < items.length; i++) {
+			items[i].style.display = 'none';
+		}
+		document.getElementById("statusNotAuth").style.display = 'block';
+		document.getElementById("statusAuth").style.display = 'none';
+		// Initiatlize CognitoAuth object
+		var auth = initCognitoSDK();
+		document.getElementById("signInButton").addEventListener("click", function() {
+			userButton(auth);
+		});
+		var curUrl = window.location.href;
+		auth.parseCognitoWebResponse(curUrl);
+	}
+
+  // Operation when tab is closed.
+	function closeTab(tabName) {
+	  document.getElementById(tabName).style.display = 'none';
+	}
+
+  // Operation when tab is opened.
+  function openTab(tabName) {
+		document.getElementById(tabName).style.display = 'block';
+	}
+
+  // Operations about toggle tab.
+	function toggleTab(tabName) {
+		if (document.getElementById("usertab").style.display == 'none') {
+			document.getElementById("usertab").style.display = 'block';
+			document.getElementById("tabIcon").innerHTML = '_';
+		} else {
+			document.getElementById("usertab").style.display = 'none';
+			document.getElementById("tabIcon").innerHTML = '+';
+		}
+	}
+
+  // Perform user operations.
+	function userButton(auth) {
+		var state = document.getElementById('signInButton').innerHTML;
+		if (state === "Sign Out") {
+			document.getElementById("signInButton").innerHTML = "Sign In";
+			auth.signOut();
+			showSignedOut();
+		} else {
+			auth.getSession();
+		}
+	}
+
+	// Operations when signed in.
+  function showSignedIn(session) {
+		document.getElementById("statusNotAuth").style.display = 'none';
+		document.getElementById("statusAuth").style.display = 'block';
+		document.getElementById("signInButton").innerHTML = "Sign Out";
+		openTab("userdetails");
+	}
+
+	// Operations when signed out.
+	function showSignedOut() {
+		document.getElementById("statusNotAuth").style.display = 'block';
+		document.getElementById("statusAuth").style.display = 'none';
+		closeTab("userdetails");
+	}
+
+  // Initialize a cognito auth object.
+	function initCognitoSDK() {
+	        AWS.config.region = 'us-east-1'; // like: us-east-1
+	        var authData = {
+	            ClientId: '[replaceme]', // Your client id here
+	            AppWebDomain: '[replaceme].auth.us-east-1.amazoncognito.com',
+	            TokenScopesArray: ['email', 'openid'], // e.g.['phone', 'email', 'profile','openid', 'aws.cognito.signin.user.admin'],
+	            RedirectUriSignIn: 'https://[replaceme].cloudfront.net/iot-shadow.html',
+	            RedirectUriSignOut: 'https://[replaceme].cloudfront.net/iot-shadow.html',
+	            UserPoolId: 'us-east-1_[replaceme]', // Your user pool id here
+	        };
+	        var login = {};
+	        var auth = new AmazonCognitoIdentity.CognitoAuth(authData);
+	        auth.userhandler = {
+	            onSuccess: function (result) {
+	                //alert("Sign in success");
+	                showSignedIn(result);
+	                var loginKey = 'cognito-idp.' + AWS.config.region + '.amazonaws.com/' + authData['UserPoolId'];
+	                login[loginKey] = result.getIdToken().getJwtToken();
+	                AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+	                    IdentityPoolId: 'us-east-1:[replaceme]',
+	                    Logins: login
+	                });
+	                AWS.config.credentials.refresh((error) => {
+	                    if (error) {
+	                        console.error(error);
+	                    } else {
+	                        var principal = AWS.config.credentials.identityId;
+	                        console.log("IdentityId: " + principal);
+
+	                        //Now we have cognito identity and credentials to make AWS IoT calls.
+	                        //Attach pre-created IoT policy to this principal.
+	                        //IMPORTANT: Make sure you have granted AttachPrincipalPolicy API permission in IAM to Cognito Identity Pool's Role.
+	                        //It is done here for the demo purpose only while cognito user should NOT be allowed to call AttachPrincipalPolicy in production, this step must be done by Administrator only
+	                        attachPrincipalPolicy("IoTWorkshopCognitoPolicy", principal);
+
+	                        //Now we can use this principal for IoT actions
+	                        //We'll need aws-iot-device-sdk-js for mqtt over websocket calls using these cognito credentials.
+	                        connect();
+	                    }
+	                });
+	            },
+	            onFailure: function (err) {
+								  console.log(err);
+	                alert("Error!");
+	            }
+	        };
+	        return auth;
+	      }
+
+	//Need aws-sdk.js to work
+	function attachPrincipalPolicy(policyName, principal) {
+	          new AWS.Iot().attachPrincipalPolicy({ policyName: policyName, principal: principal }, function (err, data) {
+	            if (err) {
+	                    console.error(err); // an error occurred
+	                } else {
+										  console.log(JSON.stringify(data));
+									}
+	          });
+	       }
+
+	//Need bundle.js to work
+	function connect() {
+	            var clientID = 'webapp:' + new Date().getTime(); //needs to be unique
+	            deviceShadow = AwsIot.thingShadow({
+	                clientId: clientID,
+	                host: 'a2a4ziueyywvoe-ats.iot.us-east-1.amazonaws.com', //can be queried using 'aws iot describe-endpoint'
+	                protocol: 'wss',
+									region: 'us-east-1',
+	                accessKeyId: AWS.config.credentials.accessKeyId,
+	                secretKey: AWS.config.credentials.secretAccessKey,
+	                sessionToken: AWS.config.credentials.sessionToken
+	            });
+						if (!shadowsRegistered) {
+							 deviceShadow.register('Door', {
+									persistentSubscribe: true
+							 });
+							 shadowsRegistered = true;
+						};
+
+						function setStatusUI(stateObject) {
+							console.log(JSON.stringify(stateObject));
+							var reportedStatus = (stateObject
+																	&& stateObject.hasOwnProperty('state')
+																	&& stateObject.state.hasOwnProperty('reported')) ? stateObject.state.reported.status : "";
+							var desiredStatus = (stateObject
+																	&& stateObject.hasOwnProperty('state')
+																	&& stateObject.state.hasOwnProperty('desired')) ? stateObject.state.desired.status : "";
+
+							if (reportedStatus){
+									document.getElementById("reportedStatus").innerHTML = "Reported: " + reportedStatus ;
+							}
+							if (desiredStatus) {
+									document.getElementById("desiredStatus").innerHTML = "Desired: " + desiredStatus ;
+							}
+						};
+
+						setTimeout(function() {
+							 var opClientToken = deviceShadow.get('Door');
+							 if (opClientToken === null) {
+									console.log('operation in progress');
+							 };
+						}, 3000);
+
+						deviceShadow.on('status', function(name, statusType, clientToken, stateObject) {
+							setStatusUI(stateObject);
+						});
+
+						deviceShadow.on('foreignStateChange', function(thingName, operation, newState) {
+  						setStatusUI(newState);
+  					});
+	       };
+	</script>
+</body>
+</html>

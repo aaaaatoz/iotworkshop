@@ -1,0 +1,4 @@
+{
+    "operation":"updateProgram",
+    "newfile":"https://[replaceme].cloudfront.net/iot-shadow.py"
+}
