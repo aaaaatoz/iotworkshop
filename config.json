@@ -1,0 +1,8 @@
+{
+    "rootCA": "./rootca.pem",
+    "privateCert": "./cert.pem",
+    "certificateKey": "./key.pem",
+    "endpoint": "[yourendpoint].iot.us-east-1.amazonaws.com",
+    "port": 8883,
+    "thingName": "Door"
+}

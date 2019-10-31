@@ -20,7 +20,7 @@ In this step we will create a device client to publish a status message to a top
   cd iotworkshop
   git checkout step1
   cd ..
-  Do the above step in your laptop to get a local copy.
+  Do the above steps in your laptop to get a local copy.
   ~~~~
 - prepare the environment in C9 console:
   ~~~~
@@ -35,19 +35,26 @@ In this step we will create a device client to publish a status message to a top
 - find your endpoint:
   ~~~~
   from IoT console - eg a2a4ziueyywvoe-ats.iot.us-east-1.amazonaws.com or
-  #aws iot describe-endpoint --endpoint-type iot:Data-ats
+  #aws iot describe-endpoint --endpoint-type iot:Data-ats --region us-east-1 > iot-endpoint.txt
   ~~~~
 ## prepare the **authorization**
   ~~~~
   attach the full IoT policy(IoTWorkshop-FullPolicy-Delete) to the certificate
-  go to "aws iot console" and in secure -> certificate, locate your certificate
+  go to "aws iot console" and in secure -> certificate
+  (https://console.aws.amazon.com/iot/home?region=us-east-1#/certificatehub),
+  locate and locate your certificate
+  click the certificate then actions -> attach the IoTWorkshop-FullPolicy-Delete
   ~~~~
 - attendees need to understand the authentication and authorization
   ~~~~
   testing:
+  authentication:
+  openssl s_client -connect [yourendpoint].iot.us-east-1.amazonaws.com:8443 -CAfile rootca.pem -cert cert.pem -key key.pem
+
+  in the console - https://console.aws.amazon.com/iot/home?region=us-east-1#/test
   subscribe to "my/topic" in the console to see if you can find the message
 
-  curl --tlsv1.2 --cacert rootca.pem --cert cert.pem --key key.pem -X POST -d "{ \"message\": \"Hello, world\" }" "https://[replacewithyourendpoint].iot.us-east-1.amazonaws.com:8443/topics/my/topic"
+  curl --tlsv1.2 --cacert rootca.pem --cert cert.pem --key key.pem -X POST -d "{ \"message\": \"Hello, world\" }" "https://[yourendpoint].iot.us-east-1.amazonaws.com:8443/topics/my/topic"
   ~~~~
 
 ## prepare the basic publish device program
