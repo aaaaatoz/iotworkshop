@@ -20,7 +20,7 @@ In this step we will create a device client to publish a status message to a top
   cd iotworkshop
   git checkout step1
   cd ..
-  Do the above step in your laptop to get a local copy.
+  Do the above steps in your laptop to get a local copy.
   ~~~~
 - prepare the environment in C9 console:
   ~~~~
@@ -35,25 +35,32 @@ In this step we will create a device client to publish a status message to a top
 - find your endpoint:
   ~~~~
   from IoT console - eg a2a4ziueyywvoe-ats.iot.us-east-1.amazonaws.com or
-  #aws iot describe-endpoint --endpoint-type iot:Data-ats
+  #aws iot describe-endpoint --endpoint-type iot:Data-ats --region us-east-1 > iot-endpoint.txt
   ~~~~
 ## prepare the **authorization**
   ~~~~
   attach the full IoT policy(IoTWorkshop-FullPolicy-Delete) to the certificate
-  go to "aws iot console" and in secure -> certificate, locate your certificate
+  go to "aws iot console" and in secure -> certificate
+  (https://console.aws.amazon.com/iot/home?region=us-east-1#/certificatehub),
+  locate and locate your certificate
+  click the certificate then actions -> attach the IoTWorkshop-FullPolicy-Delete
   ~~~~
 - attendees need to understand the authentication and authorization
   ~~~~
   testing:
+  authentication:
+  openssl s_client -connect a2a4ziueyywvoe-ats.iot.us-east-1.amazonaws.com:8443 -CAfile rootca.pem -cert cert.pem -key key.pem -v
+
+  in the console - https://console.aws.amazon.com/iot/home?region=us-east-1#/test
   subscribe to "my/topic" in the console to see if you can find the message
 
-  curl --tlsv1.2 --cacert rootca.pem --cert cert.pem --key key.pem -X POST -d "{ \"message\": \"Hello, world\" }" "https://[replacewithyourendpoint].iot.us-east-1.amazonaws.com:8443/topics/my/topic"
+  curl --tlsv1.2 --cacert rootca.pem --cert cert.pem --key key.pem -X POST -d "{ \"message\": \"Hello, world\" }" "https://a2a4ziueyywvoe-ats.iot.us-east-1.amazonaws.com:8443/topics/my/topic"
   ~~~~
 
 ## prepare the basic publish device program
 - copy the iot-pub into your directory
   ~~~~
-  cp ../iotworkshop/iot-pub.py ./iot-main.py
+  cp ./iotworkshop/iot-pub.py ./iot-main.py
   ~~~~
 - make it executable
   ~~~~
@@ -63,9 +70,9 @@ In this step we will create a device client to publish a status message to a top
   ~~~~
   echo 0 > status.txt
   ~~~~
-- copy and change the config.json file
+- copy and change the config.json file to your endpoint
   ~~~~
-  cp ../iotworkshop/config.json .
+  cp ./iotworkshop/config.json .
   ~~~~
 - start the iot-main.py from terminal
   ~~~~
@@ -73,7 +80,7 @@ In this step we will create a device client to publish a status message to a top
   ~~~~
 - consistently change the status.txt content to simulate the door status change
   ~~~~
-  #while true;
+  while true;
   do
   sleep 5;
   echo 0 > status.txt;
@@ -84,7 +91,8 @@ In this step we will create a device client to publish a status message to a top
 ## prepare the web UI
 - Create the static credentials for IoTWorkshop-dummyUser
   ~~~~
-  In the AWS console, locate the user - IoTWorkshop-dummyUser, Security credentials and generate the key/pass pair, note them down
+  In the AWS console(https://console.aws.amazon.com/iam/home?#/users/IoTWorkshop-dummyUser),
+  locate the user - IoTWorkshop-dummyUser, Security credentials and generate the key/pass pair, note them down
   ~~~~
 - replace your **local laptop's** iot-pub.html's key/pass and iot endpoint. Them launch it in the Chrome.
   ~~~~
@@ -102,12 +110,13 @@ In this step we will create a iot-job agent to kill the iot-main.py, replace the
   git checkout step2
   cd ..
   ~~~~
-- create a thing via console - Door
-- attach the certificate to the thing
+- create a thing via console(https://console.aws.amazon.com/iot/home?region=us-east-1#/thinghub) - called Door - keep all as default then choose "create thing without certificate"
+- attach the certificate to the thing in the certificate console
 - detach the full iot policy and attach the IoTWorkshop-job-policy policy
 - copy the iot-job.py from the repository to the current directory
   ~~~~
-  cp -rp iotworkshop/iot-job.py .
+  cp -rp ./iotworkshop/iot-job.py .
+  chmod a+x ./iot-job.py
   read the iot job file to understand how it works
   ~~~~
 - prepare the job artifacts:
@@ -126,15 +135,20 @@ In this step we will create a iot-job agent to kill the iot-main.py, replace the
   ~~~~
 
 # step 3 **iot shadow - reported**
+  ~~~~
+  cd iotworkshop
+  git checkout step3
+  cd ..
+  ~~~~
 ## update the iot-main.py by iot job agent
 - copy the iot-shadow.py to s3
   ~~~~
-  aws s3 cp ./iot-shadow.py s3://[yourbucket]
+  aws s3 cp ./iotworkshop/iot-shadow.py s3://[yourbucket]
   ~~~~
 - update the iotworkshop/iot-shadow.json file to point to the correct source file.
 - attach the certificate with the policy(IoTWorkshop-job-policy)
   ~~~~
-  aws iot create-job  --job-id $(uuidgen)     --targets "arn:aws:iot:us-east-1:[youraccountid]:thing/Door" --document file://iotworkshop/iot-shadow.json
+  aws iot create-job  --job-id $(uuidgen)     --targets "arn:aws:iot:us-east-1:620428855768:thing/Door" --document file://iotworkshop/iot-shadow.json
   ~~~~
 ## update the ./iotworkshop/iot-shadow.html in [replaceme] field, the value is in output of cloudformation
  1. ClientId:
@@ -155,6 +169,12 @@ $ aws s3 cp ./iotworkshop/iot-shadow.html s3://[yourbucket]
 
 # step 4 **iot shadow - desired**
 ## set up the lambda code
+~~~~
+cd iotworkshop
+git stash
+git checkout step3
+cd ..
+~~~~
 - update the lambda - IoTWorkshopSetStatus
 - update the iot-control.html with the correct API GW endpoint (the endpoint is in CloudFormation output)
 open the iot-control.html in the local laptop and change the door status - check the REST APIs/Lambda invocation
