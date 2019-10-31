@@ -1,0 +1,24 @@
+<html>
+   <head>
+      <script>
+         <!--
+            function changeDoorStatus(status) {
+              const Http = new XMLHttpRequest();
+              const url='https://jshzvvq0k4.execute-api.us-east-1.amazonaws.com/v1/';
+              Http.open("POST", url);
+              Http.send(JSON.stringify({ "status": status}));
+              Http.onreadystatechange = (e) => {
+                console.log(Http.responseText);
+              };
+            };
+         //-->
+      </script>
+   </head>
+   <body>
+      <p>Click the following button and see result</p>
+      <form>
+         <input type="button" value="Open the Door" onclick="changeDoorStatus(1)">
+     		 <input type="button" value="Close the Door" onclick="changeDoorStatus(0)">
+      </form>
+   </body>
+</html>
