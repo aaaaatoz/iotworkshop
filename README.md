@@ -172,7 +172,7 @@ $ aws s3 cp ./iotworkshop/iot-shadow.html s3://[yourbucket]
 ~~~~
 cd iotworkshop
 git stash
-git checkout step3
+git checkout step4
 cd ..
 ~~~~
 - update the lambda - IoTWorkshopSetStatus
