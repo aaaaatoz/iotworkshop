@@ -1,0 +1,528 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  SNSEmail:
+    Type: String
+    Description: A valid email address where you want to receive alarm notification
+  BucketName:
+    Type: String
+    Description: The unique BucketName only lower case eg iotworkshoprafaxu
+    # Default: "iotworkshoprafaxu"
+  DomainName:
+    Type: String
+    Description: Make Sure you choose a unique name eg iotworkshoprafaxu
+    # Default: "iotworkshoprafaxu"
+
+Resources:
+  IoTWorkshopDoor:
+    Type: 'AWS::Cloud9::EnvironmentEC2'
+    Properties:
+      Name: 'IoTWorkshop-Door'
+      InstanceType: 't2.micro'
+      # if you default VPC in us-east-1 has public and private subnets, you must specify the public subnet here
+      SubnetId: 'subnet-a8cb40a4'
+  UserPool:
+    Type: "AWS::Cognito::UserPool"
+    Properties:
+      UserPoolName: "IoTworkshop-user-pool"
+      AutoVerifiedAttributes:
+        - "email"
+      Schema:
+        - AttributeDataType: "String"
+          Name: email
+          Required: True
+
+  # Creates a User Pool Client to be used by the identity pool
+  UserPoolClient:
+    Type: "AWS::Cognito::UserPoolClient"
+    Properties:
+      ClientName: "IoTworkshop-client"
+      GenerateSecret: false
+      UserPoolId: !Ref UserPool
+      AllowedOAuthFlowsUserPoolClient: True
+      SupportedIdentityProviders:
+        - COGNITO
+      AllowedOAuthFlows:
+        - code
+        - implicit
+      AllowedOAuthScopes:
+        - openid
+        - email
+      CallbackURLs:
+        - !Join [ "", [ "https://", !GetAtt CloudFrontDistribution.DomainName, "/iot-shadow.html" ] ]
+      LogoutURLs:
+        - !Join [ "", [ "https://", !GetAtt CloudFrontDistribution.DomainName, "/iot-shadow.html" ] ]
+
+  # Creates a federeated Identity pool
+  IdentityPool:
+    Type: "AWS::Cognito::IdentityPool"
+    Properties:
+      IdentityPoolName: "IoTworkshop-Identity"
+      AllowUnauthenticatedIdentities: true
+      CognitoIdentityProviders:
+        - ClientId: !Ref UserPoolClient
+          ProviderName: !GetAtt UserPool.ProviderName
+
+  # Create a user pool domain
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      UserPoolId: !Ref UserPool
+      Domain: !Ref DomainName
+
+  # Create a role for unauthorized acces to AWS resources. Very limited access. Only allows users in the previously created Identity Pool
+  CognitoUnAuthorizedRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Federated: "cognito-identity.amazonaws.com"
+            Action:
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref IdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": unauthenticated
+      Policies:
+        - PolicyName: "CognitoUnauthorizedPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "mobileanalytics:PutEvents"
+                  - "cognito-sync:*"
+                Resource: "*"
+
+  # create a Cognito Authorized Role
+  CognitoAuthorizedRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Federated: "cognito-identity.amazonaws.com"
+            Action:
+              - "sts:AssumeRoleWithWebIdentity"
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref IdentityPool
+              "ForAnyValue:StringLike":
+                "cognito-identity.amazonaws.com:amr": authenticated
+      Policies:
+        - PolicyName: "CognitoAuthorizedPolicy"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "mobileanalytics:PutEvents"
+                  - "cognito-sync:*"
+                  - "cognito-identity:*"
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - "iot:Connect"
+                  - "iot:Publish"
+                  - "iot:Subscribe"
+                  - "iot:Receive"
+                  - "iot:GetThingShadow"
+                  - "iot:AttachPrincipalPolicy"
+                Resource: "*"
+
+  # Assigns the roles to the Identity Pool
+  IdentityPoolRoleMapping:
+    Type: "AWS::Cognito::IdentityPoolRoleAttachment"
+    Properties:
+      IdentityPoolId: !Ref IdentityPool
+      Roles:
+        authenticated: !GetAtt CognitoAuthorizedRole.Arn
+        unauthenticated: !GetAtt CognitoUnAuthorizedRole.Arn
+
+  DummyUser:
+    Type: AWS::IAM::User
+    Properties:
+      Path: "/"
+      UserName: "IoTWorkshop-dummyUser"
+      Policies:
+      - PolicyName: IoTSubscribe
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+              - "iot:Connect"
+              - "iot:Subscribe"
+              - "iot:Receive"
+            Resource: "*"
+
+  IoTWorkshopDDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: 'IoTWorkshop'
+      AttributeDefinitions:
+      - AttributeName: 'ThingName'
+        AttributeType: S
+      - AttributeName: 'Timestamp'
+        AttributeType: N
+      KeySchema:
+      - AttributeName: 'ThingName'
+        KeyType: HASH
+      - AttributeName: 'Timestamp'
+        KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  IoTSNStopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: 'IoTSNStopic'
+      TopicName: 'IoTSNStopic'
+
+  IoTSNSSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      Endpoint: !Ref SNSEmail
+      Protocol: email
+      TopicArn: !Ref IoTSNStopic
+
+  apiGateway:
+    Type: "AWS::ApiGateway::RestApi"
+    Properties:
+      Name: "IoTWorkshopAPI"
+
+  apiGatewayPostMethod:
+    Type: "AWS::ApiGateway::Method"
+    Properties:
+      AuthorizationType: "NONE"
+      HttpMethod: "POST"
+      Integration:
+        IntegrationHttpMethod: "POST"
+        Type: "AWS_PROXY"
+        Uri: !Sub
+          - "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${lambdaArn}/invocations"
+          - lambdaArn: !GetAtt "lambdaFunctionSetStatus.Arn"
+      ResourceId: !GetAtt "apiGateway.RootResourceId"
+      RestApiId: !Ref "apiGateway"
+
+  apiGatewayDeployment:
+    Type: "AWS::ApiGateway::Deployment"
+    DependsOn:
+      - "apiGatewayPostMethod"
+    Properties:
+      RestApiId: !Ref "apiGateway"
+      StageName: 'v1'
+
+  lambdaFunctionSetStatus:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: |
+          def handler(event,context):
+            return "Mock code, need to be replaced"
+      FunctionName: 'IoTWorkshopSetStatus'
+      Handler: "index.handler"
+      MemorySize: 128
+      Role: !GetAtt "lambdaIAMRole.Arn"
+      Runtime: "python3.7"
+      Timeout: 10
+
+  lambdaFunctionRule:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        ZipFile: |
+          def handler(event,context):
+            return "Mock code, need to be replaced"
+      FunctionName: 'IoTWorkshopRule'
+      Handler: "index.handler"
+      MemorySize: 128
+      Role: !GetAtt "RulelambdaIAMRole.Arn"
+      Runtime: "python3.7"
+      Timeout: 10
+
+  lambdaApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !GetAtt "lambdaFunctionSetStatus.Arn"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${apiGateway}/*/POST/"
+
+  IoTShadowPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: AllowUpdateThingShadow
+            Effect: Allow
+            Action:
+              - iot:UpdateThingShadow
+            Resource: "*"
+
+  DDBSNSPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: DDBSNS
+            Effect: Allow
+            Action:
+              - sns:Publish
+              - dynamodb:PutItem
+            Resource: "*"
+
+  lambdaIAMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - !Ref IoTShadowPolicy
+
+  RulelambdaIAMRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Action:
+              - "sts:AssumeRole"
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+      Path: /
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - !Ref DDBSNSPolicy
+
+  IoTFullAccess:
+    Type: "AWS::IoT::Policy"
+    Properties:
+      PolicyName: IoTWorkshop-FullPolicy-Delete
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: fullpolicy
+            Action:
+              - "iot:*"
+            Effect: Allow
+            Resource: "*"
+
+  IoTWorkshopCognitoPolicy:
+    Type: "AWS::IoT::Policy"
+    Properties:
+      PolicyName: IoTWorkshopCognitoPolicy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Sid: MQTTConnect
+            Action:
+              - "iot:Connect"
+            Effect: Allow
+            Resource: "*"
+          -
+            Action:
+              - "iot:Publish"
+              - "iot:Receive"
+            Effect: Allow
+            Resource: "arn:aws:iot:*:*:topic/$aws/things/*/shadow/*"
+          -
+            Action:
+              - "iot:Subscribe"
+            Effect: Allow
+            Resource: "arn:aws:iot:*:*:topicfilter/$aws/things/*/shadow/*"
+
+  IoTWorkshopShadowPolicy:
+    Type: "AWS::IoT::Policy"
+    Properties:
+      PolicyName: IoTWorkshop-shadow-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Action:
+              - "iot:Connect"
+            Effect: Allow
+            Resource: "*"
+          -
+            Action:
+              - "iot:Publish"
+              - "iot:Receive"
+            Effect: Allow
+            Resource: "arn:aws:iot:*:*:topic/$aws/things/${iot:Connection.Thing.ThingName}/shadow/*"
+          -
+            Action:
+              - "iot:Subscribe"
+            Effect: Allow
+            Resource: "arn:aws:iot:*:*:topicfilter/$aws/things/${iot:Connection.Thing.ThingName}/shadow/*"
+
+  IoTWorkshopJobPolicy:
+    Type: "AWS::IoT::Policy"
+    Properties:
+      PolicyName: IoTWorkshop-job-policy
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Action:
+              - "iot:Connect"
+            Effect: Allow
+            Resource: "*"
+          -
+            Action:
+              - "iot:Publish"
+              - "iot:Receive"
+            Effect: Allow
+            Resource: "arn:aws:iot:*:*:topic/$aws/things/Door/jobs/*"
+          -
+            Action:
+              - "iot:Subscribe"
+            Effect: Allow
+            Resource: "arn:aws:iot:*:*:topicfilter/$aws/things/Door/jobs/*"
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        DefaultCacheBehavior:
+          Compress: true
+          ForwardedValues:
+            QueryString: false
+          TargetOriginId: the-s3-bucket
+          ViewerProtocolPolicy: redirect-to-https
+        DefaultRootObject: index.html
+        Enabled: true
+        HttpVersion: http2
+        Origins:
+          - DomainName:
+              !Join [ "", [ !Ref TheBucket, ".s3.amazonaws.com" ] ]
+            Id: the-s3-bucket
+            S3OriginConfig:
+              OriginAccessIdentity:
+                !Join [ "", [ "origin-access-identity/cloudfront/", !Ref CloudFrontOriginAccessIdentity ] ]
+        PriceClass: "PriceClass_All"
+
+  CloudFrontOriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: 'CloudFront OAI for S3'
+
+  TheBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    Properties:
+      BucketName: !Ref BucketName
+
+  BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref TheBucket
+      PolicyDocument:
+        Statement:
+          -
+            Action:
+              - s3:GetObject
+            Effect: Allow
+            Resource: !Join [ "", [ "arn:aws:s3:::", !Ref TheBucket, "/*" ] ]
+            Principal:
+              CanonicalUser: !GetAtt CloudFrontOriginAccessIdentity.S3CanonicalUserId
+
+  EC2Role:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "IotWorkshopEC2role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "ec2.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+      Path: "/"
+  IoTPolicies:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: "IoTWorkshopIoTPolicy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Action: ['iot:CreateKeysAndCertificate', 'iot:CreateJob']
+            Resource: "*"
+      Roles:
+        -
+          Ref: "EC2Role"
+  S3Policies:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: "IoTWorkshopS3Policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Action: ['s3:PutObject']
+            Resource: !Join [ "", [ "arn:aws:s3:::", !Ref TheBucket, "/*" ] ]
+      Roles:
+        -
+          Ref: "EC2Role"
+  EC2InstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      InstanceProfileName: "IoTWorkshopEC2-role"
+      Path: "/"
+      Roles:
+        -
+          Ref: "EC2Role"
+
+Outputs:
+  UserPoolId:
+    Value: !Ref UserPool
+    Export:
+      Name: "UserPool::Id"
+  UserPoolClientId:
+    Value: !Ref UserPoolClient
+    Export:
+      Name: "UserPoolClient::Id"
+  IdentityPoolId:
+    Value: !Ref IdentityPool
+    Export:
+      Name: "IdentityPool::Id"
+  apiGatewayInvokeURL:
+    Value: !Sub "https://${apiGateway}.execute-api.${AWS::Region}.amazonaws.com/v1"
+  bucketName:
+    Value: !Ref BucketName
+  CallbackURLs:
+    Value: !Join [ "", [ "https://", !GetAtt CloudFrontDistribution.DomainName, "/iot-shadow.html" ] ]
+  CloudFrontDomain:
+    Value: !GetAtt CloudFrontDistribution.DomainName
+  CognitoAuthDomain:
+    Value: !Ref DomainName
